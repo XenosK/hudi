@@ -481,12 +481,12 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
     // Global dedup should be done based on recordKey only
     HoodieIndex index = mock(HoodieIndex.class);
     when(index.isGlobal()).thenReturn(true);
-    int dedupParallelism = records.getNumPartitions() + 100;
+    int dedupParallelism = records.getNumPartitions() + 2;
     HoodieData<HoodieRecord<RawTripTestPayload>> dedupedRecsRdd =
         (HoodieData<HoodieRecord<RawTripTestPayload>>) HoodieWriteHelper.newInstance()
             .deduplicateRecords(records, index, dedupParallelism, writeConfig.getSchema(), writeConfig.getProps(), HoodiePreCombineAvroRecordMerger.INSTANCE);
     List<HoodieRecord<RawTripTestPayload>> dedupedRecs = dedupedRecsRdd.collectAsList();
-    assertEquals(records.getNumPartitions(), dedupedRecsRdd.getNumPartitions());
+    assertEquals(dedupParallelism, dedupedRecsRdd.getNumPartitions());
     assertEquals(1, dedupedRecs.size());
     assertEquals(dedupedRecs.get(0).getPartitionPath(), recordThree.getPartitionPath());
     assertNodupesWithinPartition(dedupedRecs);
@@ -498,7 +498,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
         (HoodieData<HoodieRecord<RawTripTestPayload>>) HoodieWriteHelper.newInstance()
             .deduplicateRecords(records, index, dedupParallelism, writeConfig.getSchema(), writeConfig.getProps(), HoodiePreCombineAvroRecordMerger.INSTANCE);
     dedupedRecs = dedupedRecsRdd.collectAsList();
-    assertEquals(records.getNumPartitions(), dedupedRecsRdd.getNumPartitions());
+    assertEquals(dedupParallelism, dedupedRecsRdd.getNumPartitions());
     assertEquals(2, dedupedRecs.size());
     assertNodupesWithinPartition(dedupedRecs);
 
@@ -2438,6 +2438,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
         100, dataGen::generateInserts, SparkRDDWriteClient::bulkInsert, false, 100, 300,
         0, true);
     client.clean();
+    client.close();
     HoodieActiveTimeline timeline = metaClient.getActiveTimeline().reload();
     if (cleaningPolicy.isLazy()) {
       assertTrue(
@@ -2523,6 +2524,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
     cleaningPolicy = EAGER;
     client = new SparkRDDWriteClient(context, getParallelWritingWriteConfig(cleaningPolicy, populateMetaFields));
     client.startCommit();
+    client.close();
     timeline = metaClient.getActiveTimeline().reload();
     // since OCC is enabled, hudi auto flips the cleaningPolicy to Lazy.
     assertTrue(timeline.getTimelineOfActions(
@@ -2584,6 +2586,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
     assertTrue(timeline.getTimelineOfActions(
         CollectionUtils.createSet(CLEAN_ACTION)).countInstants() == 0);
     assertTrue(timeline.getCommitsTimeline().filterCompletedInstants().countInstants() == 3);
+    client.close();
   }
 
   private Pair<Path, JavaRDD<WriteStatus>> testConsistencyCheck(HoodieTableMetaClient metaClient, String instantTime, boolean enableOptimisticConsistencyGuard)
